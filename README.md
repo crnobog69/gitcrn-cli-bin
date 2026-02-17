@@ -36,11 +36,23 @@ Linux (download binary from release):
 ./scripts/install.sh --version latest
 ```
 
+If repo is private, pass token (recommended via env var):
+
+```bash
+GITEA_TOKEN="<your-token>" ./scripts/install.sh --version latest
+```
+
+Or:
+
+```bash
+./scripts/install.sh --version latest --token "<your-token>"
+```
+
 If your Gitea URL/owner/repo differs:
 
 ```bash
 ./scripts/install.sh \
-  --server-url "https://100.91.132.35" \
+  --server-url "http://100.91.132.35:5000" \
   --owner "vltc" \
   --repo "gitcrn-cli" \
   --version latest
@@ -64,11 +76,24 @@ Windows (PowerShell, download binary from release):
 .\scripts\install.ps1 -Version latest
 ```
 
+If repo is private, pass token:
+
+```powershell
+$env:GITEA_TOKEN = "<your-token>"
+.\scripts\install.ps1 -Version latest
+```
+
+Or:
+
+```powershell
+.\scripts\install.ps1 -Version latest -Token "<your-token>"
+```
+
 If your Gitea URL/owner/repo differs:
 
 ```powershell
 .\scripts\install.ps1 `
-  -ServerUrl "https://100.91.132.35" `
+  -ServerUrl "http://100.91.132.35:5000" `
   -Owner "vltc" `
   -Repo "gitcrn-cli" `
   -Version latest

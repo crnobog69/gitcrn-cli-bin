@@ -4,10 +4,11 @@ set -euo pipefail
 APP_NAME="gitcrn"
 VERSION="${VERSION:-latest}"
 PREFIX="${PREFIX:-}"
-SERVER_URL="${SERVER_URL:-https://100.91.132.35}"
+SERVER_URL="${SERVER_URL:-http://100.91.132.35:5000}"
 OWNER="${OWNER:-vltc}"
 REPO="${REPO:-gitcrn-cli}"
 INSECURE=0
+TOKEN="${GITEA_TOKEN:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,6 +56,14 @@ while [[ $# -gt 0 ]]; do
       INSECURE=1
       shift
       ;;
+    --token)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --token requires a value." >&2
+        exit 1
+      fi
+      TOKEN="$2"
+      shift 2
+      ;;
     -h|--help)
       cat <<EOF
 Usage: ./scripts/install.sh [options]
@@ -62,9 +71,10 @@ Usage: ./scripts/install.sh [options]
 Options:
   --version <value>      Release tag (default: latest)
   --prefix <path>        Install directory (default: /usr/local/bin or ~/.local/bin)
-  --server-url <url>     Gitea base URL (default: https://100.91.132.35)
+  --server-url <url>     Gitea base URL (default: http://100.91.132.35:5000)
   --owner <owner>        Repo owner (default: vltc)
   --repo <repo>          Repo name (default: gitcrn-cli)
+  --token <token>        Gitea token (or use GITEA_TOKEN env var)
   --insecure             Disable TLS certificate verification
 EOF
       exit 0
@@ -105,10 +115,14 @@ detect_arch() {
 download_file() {
   local url="$1"
   local output="$2"
+  local auth_header="Authorization: token ${TOKEN}"
   if command -v curl >/dev/null 2>&1; then
     local flags=(-fL --retry 2)
     if [[ "${INSECURE}" -eq 1 ]]; then
       flags+=(-k)
+    fi
+    if [[ -n "${TOKEN}" ]]; then
+      flags+=(-H "${auth_header}")
     fi
     curl "${flags[@]}" "$url" -o "$output"
     return
@@ -117,6 +131,9 @@ download_file() {
     local flags=()
     if [[ "${INSECURE}" -eq 1 ]]; then
       flags+=(--no-check-certificate)
+    fi
+    if [[ -n "${TOKEN}" ]]; then
+      flags+=(--header="${auth_header}")
     fi
     wget "${flags[@]}" -O "$output" "$url"
     return

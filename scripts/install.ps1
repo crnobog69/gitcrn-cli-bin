@@ -1,9 +1,10 @@
 param(
   [string]$Prefix = "$env:LOCALAPPDATA\Programs\gitcrn",
   [string]$Version = "latest",
-  [string]$ServerUrl = "https://100.91.132.35",
+  [string]$ServerUrl = "http://100.91.132.35:5000",
   [string]$Owner = "vltc",
   [string]$Repo = "gitcrn-cli",
+  [string]$Token = $env:GITEA_TOKEN,
   [switch]$Insecure
 )
 
@@ -27,12 +28,17 @@ if ([string]::IsNullOrWhiteSpace($ServerUrl) -or
   throw "ServerUrl, Owner and Repo are required."
 }
 
+$headers = @{}
+if (-not [string]::IsNullOrWhiteSpace($Token)) {
+  $headers["Authorization"] = "token $Token"
+}
+
 $os = "windows"
 $arch = Resolve-Arch
 
 if ($Version -eq "latest") {
   $apiUrl = "{0}/api/v1/repos/{1}/{2}/releases/latest" -f $ServerUrl.TrimEnd('/'), $Owner, $Repo
-  $release = Invoke-RestMethod -Uri $apiUrl
+  $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers
   if (-not $release.tag_name) {
     throw "Could not resolve latest release tag from $apiUrl"
   }
@@ -48,7 +54,7 @@ $TempFile = [System.IO.Path]::GetTempFileName()
 
 try {
   Write-Host "Downloading $downloadUrl ..."
-  Invoke-WebRequest -Uri $downloadUrl -OutFile $TempFile
+  Invoke-WebRequest -Uri $downloadUrl -Headers $headers -OutFile $TempFile
   Move-Item -Force -Path $TempFile -Destination $Target
 } finally {
   if (Test-Path $TempFile) {
