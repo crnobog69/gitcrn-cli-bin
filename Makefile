@@ -1,3 +1,4 @@
+# REMFILE/REM IS USED
 APP_NAME := gitcrn
 VERSION ?= dev
 LDFLAGS := -X main.version=$(VERSION)
