@@ -8,6 +8,8 @@
 - Клонира репо: `gitcrn clone owner/repo`
 - Додаје remote `gitcrn`: `gitcrn add owner/repo`
 - Проверава окружење: `gitcrn doctor`
+- Прави `push`/`pull` скрипте у тренутном репоу: `gitcrn make` / `gitcrn remake`
+- Покреће генерисане скрипте: `gitcrn push` / `gitcrn pull`
 - При покретању проверава да ли постоји нова верзија и исписује команду за ажурирање
 
 ## Важно
@@ -46,8 +48,26 @@ gitcrn doctor
 gitcrn init --default
 gitcrn clone vltc/kapri
 gitcrn add vltc/crnbg
+gitcrn make --push --pull
+gitcrn push
+gitcrn pull
+gitcrn -pp
 gitcrn -v
 ```
+
+## `make` / `remake`
+
+- `gitcrn make --push --pull` прави скрипте (`push.sh`/`pull.sh` на Linux-у, `push.ps1`/`pull.ps1` на Windows-у)
+- `gitcrn -pp` је пречица за `make --push --pull`
+- `gitcrn remake ...` ради исто, али преписује постојеће скрипте
+- При креирању:
+  - чита `git remote -v`
+  - пита за грану
+  - пита за remote-е за push/pull
+  - пита за commit поруку (ако притиснеш Enter, подразумевано је `❄`)
+- После креирања можеш да радиш:
+  - `gitcrn push`
+  - `gitcrn pull`
 
 ## `doctor` шта проверава
 

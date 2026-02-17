@@ -146,3 +146,28 @@ func TestCompareSemver(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRemoteNames(t *testing.T) {
+	out := strings.Join([]string{
+		"origin\thttps://example.com/repo.git (fetch)",
+		"origin\thttps://example.com/repo.git (push)",
+		"gitcrn\tgitcrn:vltc/repo.git (fetch)",
+		"gitcrn\tgitcrn:vltc/repo.git (push)",
+		"backup\tgit@backup/repo.git (push)",
+	}, "\n")
+
+	fetch, push := parseRemoteNames(out)
+	if strings.Join(fetch, ",") != "origin,gitcrn" {
+		t.Fatalf("unexpected fetch remotes: %v", fetch)
+	}
+	if strings.Join(push, ",") != "origin,gitcrn,backup" {
+		t.Fatalf("unexpected push remotes: %v", push)
+	}
+}
+
+func TestParseRemoteList(t *testing.T) {
+	got := parseRemoteList("origin, gitcrn backup origin")
+	if strings.Join(got, ",") != "origin,gitcrn,backup" {
+		t.Fatalf("unexpected list: %v", got)
+	}
+}

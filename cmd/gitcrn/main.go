@@ -25,10 +25,11 @@ const (
 	defaultHostUser  = "git"
 	defaultHostPort  = 222
 	projectURL       = "https://github.com/crnobog69/gitcrn-cli-bin"
-	creatorNames     = "cnrnijada / crnobog / vltc"
+	creatorNames     = "crnijada / crnobog / vltc"
 	latestReleaseAPI = "https://api.github.com/repos/crnobog69/gitcrn-cli-bin/releases/latest"
 	updateLinuxCmd   = "curl -fsSL https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.sh | bash"
 	updateWinCmd     = "iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.ps1 -UseBasicParsing | iex"
+	defaultCommitMsg = "❄"
 
 	ansiReset  = "\033[0m"
 	ansiRed    = "\033[31m"
@@ -60,8 +61,23 @@ func main() {
 	switch cmd {
 	case "-v", "--version", "version":
 		printVersion(os.Stdout)
+	case "-pp":
+		if err := runMake([]string{"--push", "--pull"}, false); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
 	case "doctor":
 		if err := runDoctor(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "make":
+		if err := runMake(args, false); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "remake":
+		if err := runMake(args, true); err != nil {
 			printError(err)
 			os.Exit(1)
 		}
@@ -72,6 +88,16 @@ func main() {
 		}
 	case "clone":
 		if err := runClone(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "push":
+		if err := runPush(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "pull":
+		if err := runPull(args); err != nil {
 			printError(err)
 			os.Exit(1)
 		}
@@ -298,6 +324,339 @@ func doctorWarn(name, details string) {
 	fmt.Printf("%s %s: %s\n", colorize("[WARN]", ansiYellow, stdoutColor), name, details)
 }
 
+func runMake(args []string, overwrite bool) error {
+	fs := flag.NewFlagSet("make", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	makePush := fs.Bool("push", false, "Направи push скрипту")
+	makePull := fs.Bool("pull", false, "Направи pull скрипту")
+	makeBoth := fs.Bool("pp", false, "Краћи облик за --push --pull")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printMakeUsage(os.Stdout)
+			return nil
+		}
+		printMakeUsage(os.Stderr)
+		return err
+	}
+
+	if fs.NArg() != 0 {
+		printMakeUsage(os.Stderr)
+		return fmt.Errorf("неочекивани аргументи: %s", strings.Join(fs.Args(), " "))
+	}
+
+	if *makeBoth {
+		*makePush = true
+		*makePull = true
+	}
+	if !*makePush && !*makePull {
+		printMakeUsage(os.Stderr)
+		return errors.New("изабери бар једно: --push, --pull или -pp")
+	}
+
+	if strings.TrimSpace(commandOutput("git", "rev-parse", "--is-inside-work-tree")) != "true" {
+		return errors.New("ова команда мора да се покрене унутар git репозиторијума")
+	}
+
+	remoteOutput := commandOutput("git", "remote", "-v")
+	if strings.TrimSpace(remoteOutput) == "" {
+		doctorWarn("git remote -v", "није пронађен ниједан remote")
+	} else {
+		fmt.Println(colorize("Пронађени remote-и (git remote -v):", ansiCyan, stdoutColor))
+		fmt.Println(remoteOutput)
+	}
+
+	fetchRemotes, pushRemotes := parseRemoteNames(remoteOutput)
+	defaultBranch := strings.TrimSpace(commandOutput("git", "branch", "--show-current"))
+	branch, err := promptInput(os.Stdout, os.Stdin, "Грана", defaultBranch)
+	if err != nil {
+		return fmt.Errorf("читање гране: %w", err)
+	}
+
+	created := make([]string, 0, 2)
+
+	if *makePush {
+		commitMsg, err := promptInput(os.Stdout, os.Stdin, "Порука за commit", defaultCommitMsg)
+		if err != nil {
+			return fmt.Errorf("читање commit поруке: %w", err)
+		}
+
+		defPushRemotes := strings.Join(preferNonEmpty(pushRemotes, fetchRemotes), ",")
+		remotesText, err := promptInput(os.Stdout, os.Stdin, "Remote-и за push (зарез или размак)", defPushRemotes)
+		if err != nil {
+			return fmt.Errorf("читање push remote-а: %w", err)
+		}
+		remotes := parseRemoteList(remotesText)
+		if len(remotes) == 0 {
+			return errors.New("push захтева бар један remote")
+		}
+
+		path, err := writePushScript(commitMsg, branch, remotes, overwrite)
+		if err != nil {
+			return err
+		}
+		created = append(created, path)
+	}
+
+	if *makePull {
+		defPullRemotes := strings.Join(preferNonEmpty(fetchRemotes, pushRemotes), ",")
+		remotesText, err := promptInput(os.Stdout, os.Stdin, "Remote-и за pull (зарез или размак)", defPullRemotes)
+		if err != nil {
+			return fmt.Errorf("читање pull remote-а: %w", err)
+		}
+		remotes := parseRemoteList(remotesText)
+		if len(remotes) == 0 {
+			return errors.New("pull захтева бар један remote")
+		}
+
+		path, err := writePullScript(branch, remotes, overwrite)
+		if err != nil {
+			return err
+		}
+		created = append(created, path)
+	}
+
+	for _, p := range created {
+		fmt.Println(colorize("Креирано: "+p, ansiGreen, stdoutColor))
+	}
+	return nil
+}
+
+func promptInput(w io.Writer, r io.Reader, label, defaultValue string) (string, error) {
+	if strings.TrimSpace(defaultValue) != "" {
+		fmt.Fprintf(w, "%s [%s]: ", label, defaultValue)
+	} else {
+		fmt.Fprintf(w, "%s: ", label)
+	}
+
+	reader := bufio.NewReader(r)
+	line, err := reader.ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+
+	value := strings.TrimSpace(line)
+	if value == "" {
+		return defaultValue, nil
+	}
+	return value, nil
+}
+
+func parseRemoteNames(remoteOutput string) (fetch, push []string) {
+	fetchSeen := map[string]bool{}
+	pushSeen := map[string]bool{}
+
+	lines := strings.Split(strings.TrimSpace(remoteOutput), "\n")
+	for _, line := range lines {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 3 {
+			continue
+		}
+		name := fields[0]
+		kind := strings.Trim(fields[len(fields)-1], "()")
+		switch kind {
+		case "fetch":
+			if !fetchSeen[name] {
+				fetchSeen[name] = true
+				fetch = append(fetch, name)
+			}
+		case "push":
+			if !pushSeen[name] {
+				pushSeen[name] = true
+				push = append(push, name)
+			}
+		}
+	}
+	return fetch, push
+}
+
+func parseRemoteList(input string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+
+	for _, raw := range strings.FieldsFunc(input, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n'
+	}) {
+		item := strings.TrimSpace(raw)
+		if item == "" || seen[item] {
+			continue
+		}
+		seen[item] = true
+		out = append(out, item)
+	}
+	return out
+}
+
+func preferNonEmpty(primary, fallback []string) []string {
+	if len(primary) > 0 {
+		return primary
+	}
+	return fallback
+}
+
+func writePushScript(commitMsg, branch string, remotes []string, overwrite bool) (string, error) {
+	if runtime.GOOS == "windows" {
+		path := "push.ps1"
+		content := renderPushPS1(commitMsg, branch, remotes)
+		if err := writeScriptFile(path, content, overwrite, 0o644); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
+
+	path := "push.sh"
+	content := renderPushSh(commitMsg, branch, remotes)
+	if err := writeScriptFile(path, content, overwrite, 0o755); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func writePullScript(branch string, remotes []string, overwrite bool) (string, error) {
+	if runtime.GOOS == "windows" {
+		path := "pull.ps1"
+		content := renderPullPS1(branch, remotes)
+		if err := writeScriptFile(path, content, overwrite, 0o644); err != nil {
+			return "", err
+		}
+		return path, nil
+	}
+
+	path := "pull.sh"
+	content := renderPullSh(branch, remotes)
+	if err := writeScriptFile(path, content, overwrite, 0o755); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func writeScriptFile(path, content string, overwrite bool, mode os.FileMode) error {
+	if !overwrite {
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Errorf("%s већ постоји. Користи: gitcrn remake", path)
+		}
+	}
+
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		return fmt.Errorf("не могу да упишем %s: %w", path, err)
+	}
+	return nil
+}
+
+func renderPushSh(commitMsg, branch string, remotes []string) string {
+	var sb strings.Builder
+	sb.WriteString("#!/usr/bin/env bash\n")
+	sb.WriteString("set -euo pipefail\n\n")
+	sb.WriteString("COMMIT_MSG=" + shellSingleQuote(commitMsg) + "\n")
+	sb.WriteString("BRANCH=" + shellSingleQuote(branch) + "\n")
+	sb.WriteString("REMOTES=(")
+	for i, r := range remotes {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(shellSingleQuote(r))
+	}
+	sb.WriteString(")\n\n")
+	sb.WriteString("git add .\n")
+	sb.WriteString("if git diff --cached --quiet; then\n")
+	sb.WriteString("  echo \"Nema izmena za commit. Preskacem commit.\"\n")
+	sb.WriteString("else\n")
+	sb.WriteString("  git commit -m \"$COMMIT_MSG\"\n")
+	sb.WriteString("fi\n\n")
+	sb.WriteString("for remote in \"${REMOTES[@]}\"; do\n")
+	sb.WriteString("  if [[ -n \"$BRANCH\" ]]; then\n")
+	sb.WriteString("    git push \"$remote\" \"$BRANCH\"\n")
+	sb.WriteString("  else\n")
+	sb.WriteString("    git push \"$remote\"\n")
+	sb.WriteString("  fi\n")
+	sb.WriteString("done\n")
+	return sb.String()
+}
+
+func renderPullSh(branch string, remotes []string) string {
+	var sb strings.Builder
+	sb.WriteString("#!/usr/bin/env bash\n")
+	sb.WriteString("set -euo pipefail\n\n")
+	sb.WriteString("BRANCH=" + shellSingleQuote(branch) + "\n")
+	sb.WriteString("REMOTES=(")
+	for i, r := range remotes {
+		if i > 0 {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(shellSingleQuote(r))
+	}
+	sb.WriteString(")\n\n")
+	sb.WriteString("for remote in \"${REMOTES[@]}\"; do\n")
+	sb.WriteString("  if [[ -n \"$BRANCH\" ]]; then\n")
+	sb.WriteString("    git pull \"$remote\" \"$BRANCH\"\n")
+	sb.WriteString("  else\n")
+	sb.WriteString("    git pull \"$remote\"\n")
+	sb.WriteString("  fi\n")
+	sb.WriteString("done\n")
+	return sb.String()
+}
+
+func renderPushPS1(commitMsg, branch string, remotes []string) string {
+	var sb strings.Builder
+	sb.WriteString("$ErrorActionPreference = \"Stop\"\n")
+	sb.WriteString("$CommitMessage = " + psSingleQuote(commitMsg) + "\n")
+	sb.WriteString("$Branch = " + psSingleQuote(branch) + "\n")
+	sb.WriteString("$Remotes = @(")
+	for i, r := range remotes {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(psSingleQuote(r))
+	}
+	sb.WriteString(")\n\n")
+	sb.WriteString("git add .\n")
+	sb.WriteString("git diff --cached --quiet\n")
+	sb.WriteString("if ($LASTEXITCODE -eq 0) {\n")
+	sb.WriteString("  Write-Host \"Nema izmena za commit. Preskacem commit.\"\n")
+	sb.WriteString("} else {\n")
+	sb.WriteString("  git commit -m $CommitMessage\n")
+	sb.WriteString("}\n\n")
+	sb.WriteString("foreach ($remote in $Remotes) {\n")
+	sb.WriteString("  if ([string]::IsNullOrWhiteSpace($Branch)) {\n")
+	sb.WriteString("    git push $remote\n")
+	sb.WriteString("  } else {\n")
+	sb.WriteString("    git push $remote $Branch\n")
+	sb.WriteString("  }\n")
+	sb.WriteString("}\n")
+	return sb.String()
+}
+
+func renderPullPS1(branch string, remotes []string) string {
+	var sb strings.Builder
+	sb.WriteString("$ErrorActionPreference = \"Stop\"\n")
+	sb.WriteString("$Branch = " + psSingleQuote(branch) + "\n")
+	sb.WriteString("$Remotes = @(")
+	for i, r := range remotes {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(psSingleQuote(r))
+	}
+	sb.WriteString(")\n\n")
+	sb.WriteString("foreach ($remote in $Remotes) {\n")
+	sb.WriteString("  if ([string]::IsNullOrWhiteSpace($Branch)) {\n")
+	sb.WriteString("    git pull $remote\n")
+	sb.WriteString("  } else {\n")
+	sb.WriteString("    git pull $remote $Branch\n")
+	sb.WriteString("  }\n")
+	sb.WriteString("}\n")
+	return sb.String()
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
+
+func psSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
 func runClone(args []string) error {
 	if len(args) < 1 {
 		printCloneUsage(os.Stderr)
@@ -315,6 +674,51 @@ func runClone(args []string) error {
 	}
 
 	return runGit(gitArgs...)
+}
+
+func runPush(args []string) error {
+	if len(args) != 0 {
+		printPushUsage(os.Stderr)
+		return errors.New("push не прима додатне аргументе")
+	}
+	return runGeneratedScript("push")
+}
+
+func runPull(args []string) error {
+	if len(args) != 0 {
+		printPullUsage(os.Stderr)
+		return errors.New("pull не прима додатне аргументе")
+	}
+	return runGeneratedScript("pull")
+}
+
+func runGeneratedScript(kind string) error {
+	var path string
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "windows":
+		path = kind + ".ps1"
+		if !fileExists(path) {
+			return fmt.Errorf("%s није пронађен. Покрени: gitcrn make -pp", path)
+		}
+		cmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path)
+	default:
+		path = kind + ".sh"
+		if !fileExists(path) {
+			return fmt.Errorf("%s није пронађен. Покрени: gitcrn make -pp", path)
+		}
+		cmd = exec.Command("bash", path)
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("извршавање %s није успело: %w", path, err)
+	}
+	return nil
 }
 
 func runAdd(args []string) error {
@@ -887,19 +1291,29 @@ func printRootUsage(w io.Writer) {
 
 Коришћење:
   %s doctor
+  %s make --push --pull
+  %s remake -pp
+  %s -pp
   %s init --default
   %s init --custom --host <host> --port <port> --user <user>
   %s clone owner/repo [directory]
+  %s push
+  %s pull
   %s add owner/repo
   %s -v | --version
 
 Примери:
   %s doctor
+  %s make --push --pull
+  %s remake --push
+  %s -pp
   %s init --default
   %s init --custom --host 100.91.132.35 --port 222 --user git
   %s clone vltc/kapri
+  %s push
+  %s pull
   %s add vltc/crnbg
-`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName)
+`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName)
 }
 
 func printInitUsage(w io.Writer) {
@@ -912,6 +1326,18 @@ func printInitUsage(w io.Writer) {
 func printCloneUsage(w io.Writer) {
 	fmt.Fprintf(w, `Коришћење:
   %s clone owner/repo [directory]
+`, appName)
+}
+
+func printPushUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s push
+`, appName)
+}
+
+func printPullUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s pull
 `, appName)
 }
 
@@ -931,4 +1357,14 @@ func printDoctorUsage(w io.Writer) {
 	fmt.Fprintf(w, `Коришћење:
   %s doctor
 `, appName)
+}
+
+func printMakeUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s make --push --pull
+  %s make -pp
+  %s remake --push --pull
+  %s remake -pp
+  %s -pp
+`, appName, appName, appName, appName, appName)
 }

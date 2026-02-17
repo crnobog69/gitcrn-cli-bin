@@ -2,7 +2,7 @@ APP_NAME := gitcrn
 VERSION ?= dev
 LDFLAGS := -X main.version=$(VERSION)
 
-.PHONY: build test build-linux build-windows release-assets install update clean
+.PHONY: build test build-linux build-windows release-assets install update clean clean-go-cache clean-all
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/$(APP_NAME) ./cmd/gitcrn
@@ -27,3 +27,8 @@ update:
 
 clean:
 	rm -rf bin dist
+
+clean-go-cache:
+	go clean -cache -modcache
+
+clean-all: clean clean-go-cache
