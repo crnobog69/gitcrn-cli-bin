@@ -4,11 +4,13 @@ set -euo pipefail
 APP_NAME="gitcrn"
 VERSION="${VERSION:-latest}"
 PREFIX="${PREFIX:-}"
-SERVER_URL="${SERVER_URL:-http://100.91.132.35:5000}"
-OWNER="${OWNER:-vltc}"
-REPO="${REPO:-gitcrn-cli}"
+PROVIDER="${PROVIDER:-github}"
+SERVER_URL="${SERVER_URL:-https://github.com}"
+API_URL="${API_URL:-https://api.github.com}"
+OWNER="${OWNER:-crnobog69}"
+REPO="${REPO:-gitcrn-cli-bin}"
 INSECURE=0
-TOKEN="${GITEA_TOKEN:-}"
+TOKEN="${GITCRN_TOKEN:-${GITEA_TOKEN:-}}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -34,6 +36,22 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       SERVER_URL="$2"
+      shift 2
+      ;;
+    --api-url)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --api-url requires a value." >&2
+        exit 1
+      fi
+      API_URL="$2"
+      shift 2
+      ;;
+    --provider)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --provider requires a value (github or gitea)." >&2
+        exit 1
+      fi
+      PROVIDER="$2"
       shift 2
       ;;
     --owner)
@@ -69,12 +87,14 @@ while [[ $# -gt 0 ]]; do
 Usage: ./scripts/install.sh [options]
 
 Options:
+  --provider <name>      Release provider: github or gitea (default: github)
   --version <value>      Release tag (default: latest)
   --prefix <path>        Install directory (default: /usr/local/bin or ~/.local/bin)
-  --server-url <url>     Gitea base URL (default: http://100.91.132.35:5000)
-  --owner <owner>        Repo owner (default: vltc)
-  --repo <repo>          Repo name (default: gitcrn-cli)
-  --token <token>        Gitea token (or use GITEA_TOKEN env var)
+  --server-url <url>     Web base URL (default: https://github.com)
+  --api-url <url>        API base URL for github provider (default: https://api.github.com)
+  --owner <owner>        Repo owner (default: crnobog69)
+  --repo <repo>          Repo name (default: gitcrn-cli-bin)
+  --token <token>        Token for private repos (or use GITCRN_TOKEN env var)
   --insecure             Disable TLS certificate verification
 EOF
       exit 0
@@ -87,7 +107,12 @@ EOF
 done
 
 if [[ -z "${SERVER_URL}" || -z "${OWNER}" || -z "${REPO}" ]]; then
-  echo "Error: server URL, owner and repo must be set." >&2
+  echo "Error: provider settings must be set." >&2
+  exit 1
+fi
+
+if [[ "${PROVIDER}" != "github" && "${PROVIDER}" != "gitea" ]]; then
+  echo "Error: --provider must be github or gitea." >&2
   exit 1
 fi
 
@@ -115,13 +140,20 @@ detect_arch() {
 download_file() {
   local url="$1"
   local output="$2"
-  local auth_header="Authorization: token ${TOKEN}"
+  local auth_header=""
+  if [[ -n "${TOKEN}" ]]; then
+    if [[ "${PROVIDER}" == "github" ]]; then
+      auth_header="Authorization: Bearer ${TOKEN}"
+    else
+      auth_header="Authorization: token ${TOKEN}"
+    fi
+  fi
   if command -v curl >/dev/null 2>&1; then
     local flags=(-fL --retry 2)
     if [[ "${INSECURE}" -eq 1 ]]; then
       flags+=(-k)
     fi
-    if [[ -n "${TOKEN}" ]]; then
+    if [[ -n "${auth_header}" ]]; then
       flags+=(-H "${auth_header}")
     fi
     curl "${flags[@]}" "$url" -o "$output"
@@ -132,7 +164,7 @@ download_file() {
     if [[ "${INSECURE}" -eq 1 ]]; then
       flags+=(--no-check-certificate)
     fi
-    if [[ -n "${TOKEN}" ]]; then
+    if [[ -n "${auth_header}" ]]; then
       flags+=(--header="${auth_header}")
     fi
     wget "${flags[@]}" -O "$output" "$url"
@@ -143,7 +175,12 @@ download_file() {
 }
 
 resolve_latest_tag() {
-  local api_url="${SERVER_URL%/}/api/v1/repos/${OWNER}/${REPO}/releases/latest"
+  local api_url=""
+  if [[ "${PROVIDER}" == "github" ]]; then
+    api_url="${API_URL%/}/repos/${OWNER}/${REPO}/releases/latest"
+  else
+    api_url="${SERVER_URL%/}/api/v1/repos/${OWNER}/${REPO}/releases/latest"
+  fi
   local tmp_json
   tmp_json="$(mktemp)"
   download_file "$api_url" "$tmp_json"

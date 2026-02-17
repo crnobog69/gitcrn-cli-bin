@@ -1,10 +1,13 @@
 param(
   [string]$Prefix = "$env:LOCALAPPDATA\Programs\gitcrn",
   [string]$Version = "latest",
-  [string]$ServerUrl = "http://100.91.132.35:5000",
-  [string]$Owner = "vltc",
-  [string]$Repo = "gitcrn-cli",
-  [string]$Token = $env:GITEA_TOKEN,
+  [ValidateSet("github", "gitea")]
+  [string]$Provider = "github",
+  [string]$ServerUrl = "https://github.com",
+  [string]$ApiUrl = "https://api.github.com",
+  [string]$Owner = "crnobog69",
+  [string]$Repo = "gitcrn-cli-bin",
+  [string]$Token = $(if ($env:GITCRN_TOKEN) { $env:GITCRN_TOKEN } else { $env:GITEA_TOKEN }),
   [switch]$Insecure
 )
 
@@ -30,17 +33,25 @@ if ([string]::IsNullOrWhiteSpace($ServerUrl) -or
 
 $headers = @{}
 if (-not [string]::IsNullOrWhiteSpace($Token)) {
-  $headers["Authorization"] = "token $Token"
+  if ($Provider -eq "github") {
+    $headers["Authorization"] = "Bearer $Token"
+  } else {
+    $headers["Authorization"] = "token $Token"
+  }
 }
 
 $os = "windows"
 $arch = Resolve-Arch
 
 if ($Version -eq "latest") {
-  $apiUrl = "{0}/api/v1/repos/{1}/{2}/releases/latest" -f $ServerUrl.TrimEnd('/'), $Owner, $Repo
-  $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers
+  $latestApiUrl = if ($Provider -eq "github") {
+    "{0}/repos/{1}/{2}/releases/latest" -f $ApiUrl.TrimEnd('/'), $Owner, $Repo
+  } else {
+    "{0}/api/v1/repos/{1}/{2}/releases/latest" -f $ServerUrl.TrimEnd('/'), $Owner, $Repo
+  }
+  $release = Invoke-RestMethod -Uri $latestApiUrl -Headers $headers
   if (-not $release.tag_name) {
-    throw "Could not resolve latest release tag from $apiUrl"
+    throw "Could not resolve latest release tag from $latestApiUrl"
   }
   $Version = [string]$release.tag_name
 }

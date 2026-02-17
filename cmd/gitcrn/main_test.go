@@ -103,3 +103,46 @@ func TestMergeSSHHostBlockReplaceAndAppend(t *testing.T) {
 		t.Fatalf("expected gitcrn block to be appended: %q", appended)
 	}
 }
+
+func TestHasExactSSHHostConfig(t *testing.T) {
+	content := strings.Join([]string{
+		"Host gitcrn",
+		"    HostName 100.91.132.35",
+		"    User git",
+		"    Port 222",
+		"",
+	}, "\n")
+
+	if !hasExactSSHHostConfig(content, "gitcrn", "100.91.132.35", "git", 222) {
+		t.Fatalf("expected exact ssh config to match")
+	}
+
+	if hasExactSSHHostConfig(content, "gitcrn", "100.91.132.35", "git", 220) {
+		t.Fatalf("unexpected match for wrong port")
+	}
+}
+
+func TestCompareSemver(t *testing.T) {
+	tests := []struct {
+		a      string
+		b      string
+		want   int
+		ok     bool
+		testID string
+	}{
+		{a: "v0.2.0", b: "v0.1.9", want: 1, ok: true, testID: "newer"},
+		{a: "0.1.0", b: "v0.1.0", want: 0, ok: true, testID: "same"},
+		{a: "v1.0.0", b: "dev", want: 0, ok: false, testID: "non-semver-local"},
+		{a: "v0.1.0", b: "v0.2.0", want: -1, ok: true, testID: "older"},
+	}
+
+	for _, tc := range tests {
+		got, ok := compareSemver(tc.a, tc.b)
+		if ok != tc.ok {
+			t.Fatalf("%s: ok=%v want %v", tc.testID, ok, tc.ok)
+		}
+		if ok && got != tc.want {
+			t.Fatalf("%s: got=%d want=%d", tc.testID, got, tc.want)
+		}
+	}
+}

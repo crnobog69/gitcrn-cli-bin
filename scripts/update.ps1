@@ -1,10 +1,13 @@
 param(
   [string]$Prefix = "$env:LOCALAPPDATA\Programs\gitcrn",
   [string]$Version = "latest",
-  [string]$ServerUrl = "http://100.91.132.35:5000",
-  [string]$Owner = "vltc",
-  [string]$Repo = "gitcrn-cli",
-  [string]$Token = $env:GITEA_TOKEN,
+  [ValidateSet("github", "gitea")]
+  [string]$Provider = "github",
+  [string]$ServerUrl = "https://github.com",
+  [string]$ApiUrl = "https://api.github.com",
+  [string]$Owner = "crnobog69",
+  [string]$Repo = "gitcrn-cli-bin",
+  [string]$Token = $(if ($env:GITCRN_TOKEN) { $env:GITCRN_TOKEN } else { $env:GITEA_TOKEN }),
   [switch]$Insecure
 )
 
@@ -14,7 +17,9 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 & (Join-Path $ScriptDir "install.ps1") `
   -Prefix $Prefix `
   -Version $Version `
+  -Provider $Provider `
   -ServerUrl $ServerUrl `
+  -ApiUrl $ApiUrl `
   -Owner $Owner `
   -Repo $Repo `
   -Token $Token `

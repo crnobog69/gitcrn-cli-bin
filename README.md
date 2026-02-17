@@ -1,25 +1,75 @@
 # gitcrn-cli
 
-Private CLI helper for a fixed Gitea SSH host (`gitcrn`).
+Приватни CLI алат за Gitea сервер `gitcrn`.
 
-End users do not need Go. They install prebuilt binaries from Gitea Releases.
+## Шта ради
 
-## Commands
+- Подешава SSH `Host gitcrn` у `~/.ssh/config`
+- Клонира репо: `gitcrn clone owner/repo`
+- Додаје remote `gitcrn`: `gitcrn add owner/repo`
+- Проверава окружење: `gitcrn doctor`
+- При покретању проверава да ли постоји нова верзија и исписује команду за ажурирање
+
+## Важно
+
+- За `gitcrn init` мораш да имаш инсталиран **Tailscale**
+- Ако већ постоји иста SSH конфигурација, алат неће преписивати фајл
+
+## Инсталација (Linux, без Go)
 
 ```bash
-gitcrn init --default
-gitcrn init --custom --host 100.91.132.35 --port 222 --user git
-
-gitcrn clone vltc/kapri
-gitcrn remote add gitcrn vltc/crnbg
-
-gitcrn -v
-gitcrn --version
+curl -fsSL https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/install.sh | bash
 ```
 
-## What `init --default` writes
+## Инсталација (Windows, без Go)
 
-`~/.ssh/config` (Linux/macOS) or `%USERPROFILE%\.ssh\config` (Windows):
+```powershell
+iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/install.ps1 -UseBasicParsing | iex
+```
+
+## Ажурирање (Linux, без Go)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.sh | bash
+```
+
+## Ажурирање (Windows, без Go)
+
+```powershell
+iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.ps1 -UseBasicParsing | iex
+```
+
+## Коришћење
+
+```bash
+gitcrn doctor
+gitcrn init --default
+gitcrn clone vltc/kapri
+gitcrn add vltc/crnbg
+gitcrn -v
+```
+
+## `doctor` шта проверава
+
+- Tailscale верзију (или да ли недостаје)
+- Git и `user.name` / `user.email` (локално и глобално)
+- `Host gitcrn` подешавање у SSH конфигу
+- Који SSH public key је пронађен и његов коментар (обично име/мејл)
+
+## Провера нове верзије
+
+- На сваком покретању (осим `--version`/`--help`) проверава latest release на GitHub-у
+- Ако постоји новија, само испише команду за ажурирање
+- Нема аутоматског ажурирања
+- Искључивање провере: `GITCRN_NO_UPDATE_CHECK=1 gitcrn ...`
+
+## Прилагођени `init`
+
+```bash
+gitcrn init --custom --host 100.91.132.35 --port 222 --user git
+```
+
+## SSH блок који `init --default` прави
 
 ```sshconfig
 Host gitcrn
@@ -28,123 +78,26 @@ Host gitcrn
     Port 222
 ```
 
-## Install
-
-Linux (download binary from release):
+## Примери
 
 ```bash
-./scripts/install.sh --version latest
+# Клонирање
+gitcrn clone vltc/kapri
+
+# Додавање remote-а у постојећем репоу
+gitcrn add vltc/crnbg
 ```
 
-If repo is private, pass token (recommended via env var):
-
-```bash
-GITEA_TOKEN="<your-token>" ./scripts/install.sh --version latest
-```
-
-Or:
-
-```bash
-./scripts/install.sh --version latest --token "<your-token>"
-```
-
-If your Gitea URL/owner/repo differs:
-
-```bash
-./scripts/install.sh \
-  --server-url "http://100.91.132.35:5000" \
-  --owner "vltc" \
-  --repo "gitcrn-cli" \
-  --version latest
-```
-
-If your cert is self-signed:
-
-```bash
-./scripts/install.sh --version latest --insecure
-```
-
-Linux with custom install path:
-
-```bash
-./scripts/install.sh --prefix "$HOME/.local/bin" --version latest
-```
-
-Windows (PowerShell, download binary from release):
-
-```powershell
-.\scripts\install.ps1 -Version latest
-```
-
-If repo is private, pass token:
-
-```powershell
-$env:GITEA_TOKEN = "<your-token>"
-.\scripts\install.ps1 -Version latest
-```
-
-Or:
-
-```powershell
-.\scripts\install.ps1 -Version latest -Token "<your-token>"
-```
-
-If your Gitea URL/owner/repo differs:
-
-```powershell
-.\scripts\install.ps1 `
-  -ServerUrl "http://100.91.132.35:5000" `
-  -Owner "vltc" `
-  -Repo "gitcrn-cli" `
-  -Version latest
-```
-
-If your cert is self-signed:
-
-```powershell
-.\scripts\install.ps1 -Version latest -Insecure
-```
-
-## Update
-
-Linux:
-
-```bash
-./scripts/update.sh
-```
-
-Windows (PowerShell):
-
-```powershell
-.\scripts\update.ps1
-```
-
-## Maintainer: build release assets
-
-For publishing a new version (Go required on maintainer machine):
+## За одржавање изворног кода (maintainer)
 
 ```bash
 ./scripts/release.sh --version v0.1.0
 ```
 
-It creates files in `dist/`:
+То генерише:
 
-```text
-gitcrn-linux-amd64
-gitcrn-linux-arm64
-gitcrn-windows-amd64.exe
-gitcrn-windows-arm64.exe
-checksums.txt
-```
-
-Upload those files to the matching Gitea release tag (`v0.1.0`).
-
-## Dev (source build)
-
-```bash
-make test
-make build
-make build-linux
-make build-windows
-make release-assets VERSION=v0.1.0
-```
+- `dist/gitcrn-linux-amd64`
+- `dist/gitcrn-linux-arm64`
+- `dist/gitcrn-windows-amd64.exe`
+- `dist/gitcrn-windows-arm64.exe`
+- `dist/checksums.txt`
