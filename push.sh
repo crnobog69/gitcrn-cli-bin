@@ -1,3 +1,4 @@
 git add .
 git commit -am "❄"
-git push --all
+git push gitcrn
+git push origin
