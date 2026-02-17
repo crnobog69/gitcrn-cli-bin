@@ -15,25 +15,25 @@
 - За `gitcrn init` мораш да имаш инсталиран **Tailscale**
 - Ако већ постоји иста SSH конфигурација, алат неће преписивати фајл
 
-## Инсталација (Linux, без Go)
+## Инсталација (Linux)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/install.sh | bash
 ```
 
-## Инсталација (Windows, без Go)
+## Инсталација (Windows)
 
 ```powershell
 iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/install.ps1 -UseBasicParsing | iex
 ```
 
-## Ажурирање (Linux, без Go)
+## Ажурирање (Linux)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.sh | bash
 ```
 
-## Ажурирање (Windows, без Go)
+## Ажурирање (Windows)
 
 ```powershell
 iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.ps1 -UseBasicParsing | iex
