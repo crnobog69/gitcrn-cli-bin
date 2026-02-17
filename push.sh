@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMMIT_MSG='❄'
+COMMIT_MSG='❄️'
 BRANCH='master'
 REMOTES=('gitcrn' 'origin')
 

@@ -29,7 +29,7 @@ const (
 	latestReleaseAPI = "https://api.github.com/repos/crnobog69/gitcrn-cli-bin/releases/latest"
 	updateLinuxCmd   = "curl -fsSL https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.sh | bash"
 	updateWinCmd     = "iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master/scripts/update.ps1 -UseBasicParsing | iex"
-	defaultCommitMsg = "❄"
+	defaultCommitMsg = "❄️"
 
 	ansiReset  = "\033[0m"
 	ansiRed    = "\033[31m"
