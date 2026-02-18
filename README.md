@@ -71,6 +71,13 @@ gitcrn completion bash
 gitcrn completion fish
 ```
 
+Completion покрива и опције за:
+- `gitcrn create repo ...` (`--private`, `--public`, `--desc`, `--default-branch`, `--clone`)
+- `gitcrn repo create ...` (исте опције)
+- `gitcrn make repo ...` (исте опције)
+
+Ако си већ имао стари completion фајл, генериши га поново после update-а.
+
 ### Zsh
 
 ```bash
@@ -78,6 +85,7 @@ mkdir -p ~/.zsh/completions
 gitcrn completion zsh > ~/.zsh/completions/_gitcrn
 echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
 echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+rm -f ~/.zcompdump*
 source ~/.zshrc
 ```
 
@@ -116,6 +124,9 @@ gitcrn completion fish > ~/.config/fish/completions/gitcrn.fish
   - `--desc "..."`
   - `--default-branch main`
   - `--clone`
+- После креирања алат предлаже:
+  - `gitcrn clone owner/repo`
+  - `gitcrn add owner/repo`
 
 ## `make` / `remake`
 
@@ -140,7 +151,8 @@ gitcrn completion fish > ~/.config/fish/completions/gitcrn.fish
 
 ## Провера нове верзије
 
-- На сваком покретању (осим `--version`/`--help`) проверава latest release на GitHub-у
+- На сваком покретању проверава latest release на GitHub-у
+- Изузетак: `gitcrn completion` (да не поквари излаз completion скрипте)
 - Ако постоји новија, само испише команду за ажурирање
 - Нема аутоматског ажурирања
 - Искључивање провере: `GITCRN_NO_UPDATE_CHECK=1 gitcrn ...`
