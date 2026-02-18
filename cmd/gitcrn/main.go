@@ -24,6 +24,7 @@ const (
 	defaultHostName  = "100.91.132.35"
 	defaultHostUser  = "git"
 	defaultHostPort  = 222
+	defaultServerURL = "http://100.91.132.35:5000"
 	projectURL       = "https://github.com/crnobog69/gitcrn-cli-bin"
 	creatorNames     = "crnijada / crnobog / vltc"
 	latestReleaseAPI = "https://api.github.com/repos/crnobog69/gitcrn-cli-bin/releases/latest"
@@ -45,6 +46,26 @@ var (
 	stderrColor = detectColor(os.Stderr)
 )
 
+type appConfig struct {
+	ServerURL string
+	Token     string
+	SSHAlias  string
+	SSHHost   string
+	SSHPort   int
+	SSHUser   string
+}
+
+type giteaUser struct {
+	Login string `json:"login"`
+}
+
+type giteaCreateRepoRequest struct {
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	Private       bool   `json:"private"`
+	DefaultBranch string `json:"default_branch,omitempty"`
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		printRootUsage(os.Stderr)
@@ -61,6 +82,16 @@ func main() {
 	switch cmd {
 	case "-v", "--version", "version":
 		printVersion(os.Stdout)
+	case "completion":
+		if err := runCompletion(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "-gc", "gc":
+		if err := runGenerateConfig(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
 	case "-pp":
 		if err := runMake([]string{"--push", "--pull"}, false); err != nil {
 			printError(err)
@@ -83,6 +114,21 @@ func main() {
 		}
 	case "init":
 		if err := runInit(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "generate":
+		if err := runGenerate(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "create":
+		if err := runCreate(args); err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	case "repo":
+		if err := runRepo(args); err != nil {
 			printError(err)
 			os.Exit(1)
 		}
@@ -322,6 +368,364 @@ func doctorOK(name, details string) {
 
 func doctorWarn(name, details string) {
 	fmt.Printf("%s %s: %s\n", colorize("[WARN]", ansiYellow, stdoutColor), name, details)
+}
+
+func runGenerate(args []string) error {
+	if len(args) < 1 {
+		printGenerateUsage(os.Stderr)
+		return errors.New("generate тражи подкоманду")
+	}
+
+	switch args[0] {
+	case "config":
+		return runGenerateConfig(args[1:])
+	case "-h", "--help", "help":
+		printGenerateUsage(os.Stdout)
+		return nil
+	default:
+		printGenerateUsage(os.Stderr)
+		return fmt.Errorf("неподржана generate подкоманда: %s", args[0])
+	}
+}
+
+func runGenerateConfig(args []string) error {
+	fs := flag.NewFlagSet("generate config", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	force := fs.Bool("force", false, "Препиши постојећи config.toml")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printGenerateConfigUsage(os.Stdout)
+			return nil
+		}
+		printGenerateConfigUsage(os.Stderr)
+		return err
+	}
+
+	if fs.NArg() != 0 {
+		printGenerateConfigUsage(os.Stderr)
+		return fmt.Errorf("неочекивани аргументи: %s", strings.Join(fs.Args(), " "))
+	}
+
+	configPath, err := appConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		return fmt.Errorf("креирање config директоријума: %w", err)
+	}
+
+	if !*force {
+		if _, err := os.Stat(configPath); err == nil {
+			return fmt.Errorf("%s већ постоји. Користи --force ако желиш препис", configPath)
+		}
+	}
+
+	content := strings.Join([]string{
+		"# gitcrn config",
+		fmt.Sprintf("server_url = %q", defaultServerURL),
+		"token = \"\"",
+		"",
+		fmt.Sprintf("ssh_alias = %q", defaultHostAlias),
+		fmt.Sprintf("ssh_host = %q", defaultHostName),
+		fmt.Sprintf("ssh_port = %d", defaultHostPort),
+		fmt.Sprintf("ssh_user = %q", defaultHostUser),
+		"",
+	}, "\n")
+
+	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
+		return fmt.Errorf("упис %s: %w", configPath, err)
+	}
+
+	fmt.Println(colorize("Креиран config: "+configPath, ansiGreen, stdoutColor))
+	fmt.Println("Упиши token у config или постави env: GITCRN_TOKEN")
+	return nil
+}
+
+func runCreate(args []string) error {
+	if len(args) < 1 {
+		printCreateUsage(os.Stderr)
+		return errors.New("create тражи подкоманду")
+	}
+
+	switch args[0] {
+	case "repo":
+		return runCreateRepo(args[1:])
+	case "-h", "--help", "help":
+		printCreateUsage(os.Stdout)
+		return nil
+	default:
+		printCreateUsage(os.Stderr)
+		return fmt.Errorf("неподржана create подкоманда: %s", args[0])
+	}
+}
+
+func runRepo(args []string) error {
+	if len(args) < 1 {
+		printRepoUsage(os.Stderr)
+		return errors.New("repo тражи подкоманду")
+	}
+
+	switch args[0] {
+	case "create":
+		return runCreateRepo(args[1:])
+	case "-h", "--help", "help":
+		printRepoUsage(os.Stdout)
+		return nil
+	default:
+		printRepoUsage(os.Stderr)
+		return fmt.Errorf("неподржана repo подкоманда: %s", args[0])
+	}
+}
+
+func runCreateRepo(args []string) error {
+	fs := flag.NewFlagSet("create repo", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+
+	private := fs.Bool("private", true, "Креирај private репозиторијум")
+	public := fs.Bool("public", false, "Креирај public репозиторијум")
+	desc := fs.String("desc", "", "Опис репозиторијума")
+	defaultBranch := fs.String("default-branch", "", "Подразумевана грана (нпр main)")
+	cloneNow := fs.Bool("clone", false, "Одмах клонирај после креирања")
+
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printCreateRepoUsage(os.Stdout)
+			return nil
+		}
+		printCreateRepoUsage(os.Stderr)
+		return err
+	}
+	if fs.NArg() != 1 {
+		printCreateRepoUsage(os.Stderr)
+		return errors.New("create repo тражи owner/repo")
+	}
+	if *public {
+		*private = false
+	}
+
+	owner, repoName, err := parseOwnerRepo(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+
+	cfg, err := loadAppConfig()
+	if err != nil {
+		return err
+	}
+	token := strings.TrimSpace(os.Getenv("GITCRN_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("GITEA_TOKEN"))
+	}
+	if token == "" {
+		token = strings.TrimSpace(cfg.Token)
+	}
+	if token == "" {
+		return errors.New("недостаје token. Постави GITCRN_TOKEN или token у ~/.config/gitcrn/config.toml")
+	}
+
+	serverURL := strings.TrimSpace(cfg.ServerURL)
+	if serverURL == "" {
+		serverURL = defaultServerURL
+	}
+	serverURL = strings.TrimRight(serverURL, "/")
+
+	login, err := giteaCurrentUser(serverURL, token)
+	if err != nil {
+		return fmt.Errorf("не могу да прочитам корисника преко API: %w", err)
+	}
+
+	endpoint := serverURL + "/api/v1/user/repos"
+	if owner != login {
+		endpoint = serverURL + "/api/v1/orgs/" + owner + "/repos"
+	}
+
+	payload := giteaCreateRepoRequest{
+		Name:          repoName,
+		Description:   strings.TrimSpace(*desc),
+		Private:       *private,
+		DefaultBranch: strings.TrimSpace(*defaultBranch),
+	}
+
+	if err := giteaCreateRepo(endpoint, token, payload); err != nil {
+		return err
+	}
+
+	sshURL := fmt.Sprintf("%s:%s/%s.git", defaultHostAlias, owner, repoName)
+	fmt.Println(colorize("Репозиторијум креиран: "+owner+"/"+repoName, ansiGreen, stdoutColor))
+	fmt.Printf("SSH URL: %s\n", sshURL)
+
+	if *cloneNow {
+		return runGit("clone", sshURL)
+	}
+	fmt.Printf("Следеће: git clone %s\n", sshURL)
+	return nil
+}
+
+func parseOwnerRepo(input string) (owner, repo string, err error) {
+	s := strings.TrimSpace(input)
+	s = strings.TrimSuffix(strings.TrimPrefix(s, "/"), ".git")
+	parts := strings.Split(s, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", errors.New("формат мора бити owner/repo")
+	}
+	return parts[0], parts[1], nil
+}
+
+func giteaCurrentUser(serverURL, token string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/api/v1/user", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", appName)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+
+	var u giteaUser
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(u.Login) == "" {
+		return "", errors.New("празан login у API одговору")
+	}
+	return strings.TrimSpace(u.Login), nil
+}
+
+func giteaCreateRepo(endpoint, token string, payload giteaCreateRepoRequest) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "token "+token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", appName)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+
+	msg, _ := io.ReadAll(resp.Body)
+	trimmed := strings.TrimSpace(string(msg))
+	var errPayload map[string]any
+	if err := json.Unmarshal(msg, &errPayload); err == nil {
+		if v, ok := errPayload["message"].(string); ok && strings.TrimSpace(v) != "" {
+			trimmed = strings.TrimSpace(v)
+		}
+	}
+	if trimmed == "" {
+		trimmed = "непозната грешка"
+	}
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("repo већ постоји: %s", trimmed)
+	}
+	return fmt.Errorf("create repo неуспешан (status %d): %s", resp.StatusCode, trimmed)
+}
+
+func appConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("детекција home директоријума: %w", err)
+	}
+	return filepath.Join(home, ".config", "gitcrn", "config.toml"), nil
+}
+
+func loadAppConfig() (appConfig, error) {
+	cfg := appConfig{
+		ServerURL: defaultServerURL,
+		SSHAlias:  defaultHostAlias,
+		SSHHost:   defaultHostName,
+		SSHPort:   defaultHostPort,
+		SSHUser:   defaultHostUser,
+	}
+
+	path, err := appConfigPath()
+	if err != nil {
+		return cfg, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cfg, nil
+		}
+		return cfg, fmt.Errorf("читање %s: %w", path, err)
+	}
+
+	lines := strings.Split(normalizeNewlines(string(data)), "\n")
+	for _, raw := range lines {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if i := strings.Index(line, "#"); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		if line == "" {
+			continue
+		}
+
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
+		val := strings.TrimSpace(parts[1])
+		val = strings.Trim(strings.TrimSpace(val), "\"")
+
+		switch key {
+		case "server_url":
+			if val != "" {
+				cfg.ServerURL = val
+			}
+		case "token":
+			cfg.Token = val
+		case "ssh_alias":
+			if val != "" {
+				cfg.SSHAlias = val
+			}
+		case "ssh_host":
+			if val != "" {
+				cfg.SSHHost = val
+			}
+		case "ssh_user":
+			if val != "" {
+				cfg.SSHUser = val
+			}
+		case "ssh_port":
+			if n, err := strconv.Atoi(val); err == nil && n > 0 && n <= 65535 {
+				cfg.SSHPort = n
+			}
+		}
+	}
+	return cfg, nil
 }
 
 func runMake(args []string, overwrite bool) error {
@@ -692,6 +1096,166 @@ func runPull(args []string) error {
 	return runGeneratedScript("pull")
 }
 
+func runCompletion(args []string) error {
+	if len(args) != 1 {
+		printCompletionUsage(os.Stderr)
+		return errors.New("completion тражи један аргумент: zsh, bash или fish")
+	}
+
+	script, err := completionScript(args[0])
+	if err != nil {
+		printCompletionUsage(os.Stderr)
+		return err
+	}
+	fmt.Print(script)
+	return nil
+}
+
+func completionScript(shell string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(shell)) {
+	case "zsh":
+		return fmt.Sprintf(`#compdef %s
+
+_%s() {
+  local -a commands
+  commands=(
+    'generate:Генериши подешавања'
+    'create:Креирај ресурсе'
+    'repo:Repo namespace команде'
+    'doctor:Провера окружења'
+    'make:Генериши push/pull скрипте'
+    'remake:Препиши push/pull скрипте'
+    'init:Подеси SSH alias %s'
+    'clone:Клонирај owner/repo преко SSH'
+    'push:Покрени push.sh/push.ps1'
+    'pull:Покрени pull.sh/pull.ps1'
+    'add:Додај remote %s'
+    'completion:Генериши shell completion'
+    '-gc:Краћи облик за generate config'
+    '-pp:Краћи облик за make --push --pull'
+    '-v:Прикажи верзију'
+    '--version:Прикажи верзију'
+    'help:Помоћ'
+  )
+
+  local -a root_flags
+  root_flags=(
+    '-h[Помоћ]'
+    '--help[Помоћ]'
+  )
+
+  local curcontext="$curcontext" state line
+  _arguments -C \
+    $root_flags \
+    '1:команда:->cmds' \
+    '*::аргумент:->args'
+
+  case "$state" in
+    cmds)
+      _describe 'команде' commands
+      ;;
+    args)
+      case "$line[1]" in
+        init)
+          _arguments '--default[Подразумевана SSH подешавања]' '--custom[Прилагођена SSH подешавања]' '--host[SSH HostName]:host:' '--port[SSH порт]:port:' '--user[SSH корисник]:user:'
+          ;;
+        completion)
+          _values 'shell' zsh bash fish
+          ;;
+        generate)
+          _values 'подкоманда' config
+          ;;
+        create|repo)
+          _values 'подкоманда' repo create
+          ;;
+        make|remake)
+          _arguments '--push[Генериши push скрипту]' '--pull[Генериши pull скрипту]' '-pp[И push и pull]'
+          ;;
+        clone|add)
+          _message 'owner/repo'
+          ;;
+      esac
+      ;;
+  esac
+}
+
+_%s "$@"
+`, appName, appName, defaultHostAlias, defaultHostAlias, appName), nil
+	case "bash":
+		return fmt.Sprintf(`_%s_complete() {
+  local cur prev words cword
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  prev=""
+  if [[ $COMP_CWORD -gt 0 ]]; then
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+  fi
+  words=("${COMP_WORDS[@]}")
+  cword=$COMP_CWORD
+
+  local root_cmds="generate create repo doctor make remake init clone push pull add completion -gc -pp -v --version help"
+  local opts="-h --help"
+
+  if [[ $cword -eq 1 ]]; then
+    COMPREPLY=( $(compgen -W "$root_cmds $opts" -- "$cur") )
+    return
+  fi
+
+  case "${words[1]}" in
+    init)
+      COMPREPLY=( $(compgen -W "--default --custom --host --port --user -h --help" -- "$cur") )
+      ;;
+    completion)
+      COMPREPLY=( $(compgen -W "zsh bash fish" -- "$cur") )
+      ;;
+    generate)
+      COMPREPLY=( $(compgen -W "config -h --help" -- "$cur") )
+      ;;
+    create)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "repo -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--private --public --desc --default-branch --clone -h --help" -- "$cur") )
+      fi
+      ;;
+    repo)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "create -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--private --public --desc --default-branch --clone -h --help" -- "$cur") )
+      fi
+      ;;
+    make|remake)
+      COMPREPLY=( $(compgen -W "--push --pull -pp -h --help" -- "$cur") )
+      ;;
+    clone|add)
+      COMPREPLY=()
+      ;;
+  esac
+}
+
+complete -F _%s_complete %s
+`, appName, appName, appName), nil
+	case "fish":
+		return fmt.Sprintf(`complete -c %s -f
+complete -c %s -n "__fish_use_subcommand" -a "generate create repo doctor make remake init clone push pull add completion -gc -pp -v --version help"
+complete -c %s -n "__fish_seen_subcommand_from completion" -a "zsh bash fish"
+complete -c %s -n "__fish_seen_subcommand_from generate" -a "config"
+complete -c %s -n "__fish_seen_subcommand_from create" -a "repo"
+complete -c %s -n "__fish_seen_subcommand_from repo" -a "create"
+complete -c %s -n "__fish_seen_subcommand_from make remake" -l push
+complete -c %s -n "__fish_seen_subcommand_from make remake" -l pull
+complete -c %s -n "__fish_seen_subcommand_from make remake" -o pp
+complete -c %s -n "__fish_seen_subcommand_from init" -l default
+complete -c %s -n "__fish_seen_subcommand_from init" -l custom
+complete -c %s -n "__fish_seen_subcommand_from init" -l host -r
+complete -c %s -n "__fish_seen_subcommand_from init" -l port -r
+complete -c %s -n "__fish_seen_subcommand_from init" -l user -r
+`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName), nil
+	default:
+		return "", fmt.Errorf("неподржан shell: %s (подржано: zsh, bash, fish)", shell)
+	}
+}
+
 func runGeneratedScript(kind string) error {
 	var path string
 	var cmd *exec.Cmd
@@ -763,7 +1327,7 @@ func shouldCheckUpdates(cmd string) bool {
 		return false
 	}
 	switch cmd {
-	case "-h", "--help", "help", "-v", "--version", "version":
+	case "-h", "--help", "help", "-v", "--version", "version", "completion":
 		return false
 	default:
 		return true
@@ -1290,6 +1854,11 @@ func printRootUsage(w io.Writer) {
 	fmt.Fprintf(w, `%s - приватни Gitea CLI алат
 
 Коришћење:
+  %s generate config
+  %s -gc
+  %s completion zsh|bash|fish
+  %s create repo owner/repo
+  %s repo create owner/repo
   %s doctor
   %s make --push --pull
   %s remake -pp
@@ -1303,6 +1872,11 @@ func printRootUsage(w io.Writer) {
   %s -v | --version
 
 Примери:
+  %s generate config
+  %s -gc --force
+  %s completion zsh > ~/.zsh/completions/_gitcrn
+  %s create repo vltc/mojrepo --private --clone
+  %s repo create crnbg/platform --public
   %s doctor
   %s make --push --pull
   %s remake --push
@@ -1313,7 +1887,7 @@ func printRootUsage(w io.Writer) {
   %s push
   %s pull
   %s add vltc/crnbg
-`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName)
+`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName)
 }
 
 func printInitUsage(w io.Writer) {
@@ -1357,6 +1931,47 @@ func printDoctorUsage(w io.Writer) {
 	fmt.Fprintf(w, `Коришћење:
   %s doctor
 `, appName)
+}
+
+func printGenerateUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s generate config
+  %s -gc
+`, appName, appName)
+}
+
+func printGenerateConfigUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s generate config [--force]
+  %s -gc [--force]
+`, appName, appName)
+}
+
+func printCompletionUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s completion zsh
+  %s completion bash
+  %s completion fish
+`, appName, appName, appName)
+}
+
+func printCreateUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s create repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
+`, appName)
+}
+
+func printRepoUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s repo create owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
+`, appName)
+}
+
+func printCreateRepoUsage(w io.Writer) {
+	fmt.Fprintf(w, `Коришћење:
+  %s create repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
+  %s repo create owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
+`, appName, appName)
 }
 
 func printMakeUsage(w io.Writer) {

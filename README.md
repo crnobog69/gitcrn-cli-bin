@@ -5,6 +5,8 @@
 ## Шта ради
 
 - Подешава SSH `Host gitcrn` у `~/.ssh/config`
+- Генерише конфиг: `gitcrn generate config` или `gitcrn -gc`
+- Креира репо преко Gitea API: `gitcrn create repo owner/repo`
 - Клонира репо: `gitcrn clone owner/repo`
 - Додаје remote `gitcrn`: `gitcrn add owner/repo`
 - Проверава окружење: `gitcrn doctor`
@@ -45,6 +47,8 @@ iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master
 
 ```bash
 gitcrn doctor
+gitcrn -gc
+gitcrn create repo vltc/mojrepo --private --clone
 gitcrn init --default
 gitcrn clone vltc/kapri
 gitcrn add vltc/crnbg
@@ -54,6 +58,61 @@ gitcrn pull
 gitcrn -pp
 gitcrn -v
 ```
+
+## Shell completion
+
+`gitcrn` има уграђену команду за completion:
+
+```bash
+gitcrn completion zsh
+gitcrn completion bash
+gitcrn completion fish
+```
+
+### Zsh
+
+```bash
+mkdir -p ~/.zsh/completions
+gitcrn completion zsh > ~/.zsh/completions/_gitcrn
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Bash
+
+```bash
+mkdir -p ~/.local/share/bash-completion/completions
+gitcrn completion bash > ~/.local/share/bash-completion/completions/gitcrn
+```
+
+### Fish
+
+```bash
+mkdir -p ~/.config/fish/completions
+gitcrn completion fish > ~/.config/fish/completions/gitcrn.fish
+```
+
+## Конфиг и token
+
+- Конфиг фајл: `~/.config/gitcrn/config.toml`
+- Генерисање шаблона:
+  - `gitcrn generate config`
+  - `gitcrn -gc`
+- Token се чита редом:
+  - `GITCRN_TOKEN` (или `GITEA_TOKEN`)
+  - `~/.config/gitcrn/config.toml` (`token = "..."`)
+
+## `create repo`
+
+- Главна команда: `gitcrn create repo owner/repo`
+- Alias: `gitcrn repo create owner/repo`
+- Опције:
+  - `--private` (default)
+  - `--public`
+  - `--desc "..."`
+  - `--default-branch main`
+  - `--clone`
 
 ## `make` / `remake`
 
@@ -113,6 +172,12 @@ gitcrn add vltc/crnbg
 ```bash
 ./scripts/release.sh --version v0.1.0
 ```
+
+```bash
+rem run -D RELEASE_VERSION=v0.5.0 github-release
+```
+
+`RELEASE_VERSION` мора бити production tag у формату `vX.Y.Z` (нпр `v0.5.0`).
 
 То генерише:
 

@@ -171,3 +171,57 @@ func TestParseRemoteList(t *testing.T) {
 		t.Fatalf("unexpected list: %v", got)
 	}
 }
+
+func TestParseOwnerRepo(t *testing.T) {
+	owner, repo, err := parseOwnerRepo("vltc/kapri")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if owner != "vltc" || repo != "kapri" {
+		t.Fatalf("unexpected owner/repo: %s/%s", owner, repo)
+	}
+
+	_, _, err = parseOwnerRepo("kapri")
+	if err == nil {
+		t.Fatalf("expected error for invalid repo spec")
+	}
+}
+
+func TestCompletionScript(t *testing.T) {
+	tests := []string{"zsh", "bash", "fish"}
+	for _, shell := range tests {
+		out, err := completionScript(shell)
+		if err != nil {
+			t.Fatalf("unexpected error for %s: %v", shell, err)
+		}
+		if strings.TrimSpace(out) == "" {
+			t.Fatalf("expected non-empty completion output for %s", shell)
+		}
+		if !strings.Contains(out, "completion") {
+			t.Fatalf("completion output for %s should mention completion command", shell)
+		}
+	}
+
+	if _, err := completionScript("pwsh"); err == nil {
+		t.Fatalf("expected unsupported shell error")
+	}
+}
+
+func TestShouldCheckUpdates(t *testing.T) {
+	t.Setenv("GITCRN_NO_UPDATE_CHECK", "")
+
+	if shouldCheckUpdates("completion") {
+		t.Fatalf("completion should not trigger update checks")
+	}
+	if shouldCheckUpdates("--version") {
+		t.Fatalf("--version should not trigger update checks")
+	}
+	if !shouldCheckUpdates("doctor") {
+		t.Fatalf("doctor should trigger update checks")
+	}
+
+	t.Setenv("GITCRN_NO_UPDATE_CHECK", "1")
+	if shouldCheckUpdates("doctor") {
+		t.Fatalf("env flag should disable update checks")
+	}
+}

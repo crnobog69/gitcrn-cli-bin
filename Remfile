@@ -4,6 +4,9 @@ default = "build"
 APP_NAME = "gitcrn"
 VERSION = "${VERSION:-dev}"
 LDFLAGS = "-X main.version=${VERSION}"
+RELEASE_VERSION = "${RELEASE_VERSION:-}"
+UPDATE_REPO = "${UPDATE_REPO:-crnobog69/gitcrn-cli-bin}"
+UPDATE_REF = "${UPDATE_REF:-master}"
 
 [task.build]
 desc = "Build gitcrn binary"
@@ -32,7 +35,33 @@ cmds = [
 
 [task.release-assets]
 desc = "Build release artifacts"
-cmds = ["./scripts/release.sh --version ${VERSION}"]
+cmds = [
+  "test -n \"${RELEASE_VERSION}\" || (echo 'Set RELEASE_VERSION, example: -D RELEASE_VERSION=v0.5.0' >&2; exit 1)",
+  "echo \"${RELEASE_VERSION}\" | grep -Eq '^v[0-9]+\\.[0-9]+\\.[0-9]+$' || (echo 'RELEASE_VERSION mora da bude u formatu vX.Y.Z (npr v0.5.0)' >&2; exit 1)",
+  "./scripts/release.sh --version ${RELEASE_VERSION}",
+]
+
+[task.release-preflight]
+desc = "Validate release prerequisites"
+deps = ["release-assets"]
+cmds = [
+  "gh auth status >/dev/null 2>&1 || (echo 'GitHub auth nije spreman. Pokreni: gh auth login' >&2; exit 1)",
+  "if gh release view ${RELEASE_VERSION} >/dev/null 2>&1; then echo 'Release/tag vec postoji: ${RELEASE_VERSION}. Koristi novu verziju (npr v0.4.1) ili ručno upload --clobber.' >&2; exit 1; fi",
+  "test -f dist/${APP_NAME}-linux-amd64",
+  "test -f dist/${APP_NAME}-linux-arm64",
+  "test -f dist/${APP_NAME}-windows-amd64.exe",
+  "test -f dist/${APP_NAME}-windows-arm64.exe",
+  "test -f dist/checksums.txt",
+]
+
+[task.github-release]
+desc = "Create GitHub release (tag + upload assets)"
+deps = ["release-preflight"]
+cmds = [
+  "gh auth status",
+  "printf '%s\n' '## Update' '' '### Linux' '~~~bash' 'curl -fsSL https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_REF}/scripts/update.sh | bash' '~~~' '' '### Windows (PowerShell)' '~~~powershell' 'iwr https://raw.githubusercontent.com/${UPDATE_REPO}/${UPDATE_REF}/scripts/update.ps1 -UseBasicParsing | iex' '~~~' > dist/release-notes.md",
+  "gh release create ${RELEASE_VERSION} dist/${APP_NAME}-linux-amd64 dist/${APP_NAME}-linux-arm64 dist/${APP_NAME}-windows-amd64.exe dist/${APP_NAME}-windows-arm64.exe dist/checksums.txt --title \"${RELEASE_VERSION}\" --generate-notes --notes-file dist/release-notes.md",
+]
 
 [task.install]
 desc = "Install gitcrn from release"
