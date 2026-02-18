@@ -465,8 +465,8 @@ func runCreate(args []string) error {
 
 func runRepo(args []string) error {
 	if len(args) < 1 {
-		printRepoUsage(os.Stderr)
-		return errors.New("repo тражи подкоманду")
+		printRepoUsage(os.Stdout)
+		return nil
 	}
 
 	switch args[0] {
@@ -554,14 +554,14 @@ func runCreateRepo(args []string) error {
 		return err
 	}
 
-	sshURL := fmt.Sprintf("%s:%s/%s.git", defaultHostAlias, owner, repoName)
+	ownerRepo := fmt.Sprintf("%s/%s", owner, repoName)
 	fmt.Println(colorize("Репозиторијум креиран: "+owner+"/"+repoName, ansiGreen, stdoutColor))
-	fmt.Printf("SSH URL: %s\n", sshURL)
 
 	if *cloneNow {
-		return runGit("clone", sshURL)
+		return runClone([]string{ownerRepo})
 	}
-	fmt.Printf("Следеће: git clone %s\n", sshURL)
+	fmt.Printf("Следеће: %s clone %s\n", appName, ownerRepo)
+	fmt.Printf("У постојећем репоу: %s add %s\n", appName, ownerRepo)
 	return nil
 }
 
@@ -732,6 +732,13 @@ func loadAppConfig() (appConfig, error) {
 }
 
 func runMake(args []string, overwrite bool) error {
+	if len(args) > 0 && args[0] == "repo" {
+		if overwrite {
+			return errors.New("remake repo није подржан. Користи: gitcrn make repo owner/repo")
+		}
+		return runCreateRepo(args[1:])
+	}
+
 	fs := flag.NewFlagSet("make", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 
@@ -1126,7 +1133,7 @@ _%s() {
     'create:Креирај ресурсе'
     'repo:Repo namespace команде'
     'doctor:Провера окружења'
-    'make:Генериши push/pull скрипте'
+    'make:Генериши push/pull скрипте или make repo'
     'remake:Препиши push/pull скрипте'
     'init:Подеси SSH alias %s'
     'clone:Клонирај owner/repo преко SSH'
@@ -1168,10 +1175,35 @@ _%s() {
         generate)
           _values 'подкоманда' config
           ;;
-        create|repo)
-          _values 'подкоманда' repo create
+        create)
+          case "$line[2]" in
+            repo)
+              _arguments '--private[Креирај private репозиторијум]' '--public[Креирај public репозиторијум]' '--desc[Опис]:опис:' '--default-branch[Грана]:грана:' '--clone[Одмах клонирај]'
+              ;;
+            *)
+              _values 'подкоманда' repo
+              ;;
+          esac
           ;;
-        make|remake)
+        repo)
+          case "$line[2]" in
+            create)
+              _arguments '--private[Креирај private репозиторијум]' '--public[Креирај public репозиторијум]' '--desc[Опис]:опис:' '--default-branch[Грана]:грана:' '--clone[Одмах клонирај]'
+              ;;
+            *)
+              _values 'подкоманда' create
+              ;;
+          esac
+          ;;
+        make)
+          _arguments '1:подкоманда/опција:(repo --push --pull -pp)' '*::аргумент:->makeargs'
+          case "$line[2]" in
+            repo)
+              _arguments '--private[Креирај private репозиторијум]' '--public[Креирај public репозиторијум]' '--desc[Опис]:опис:' '--default-branch[Грана]:грана:' '--clone[Одмах клонирај]'
+              ;;
+          esac
+          ;;
+        remake)
           _arguments '--push[Генериши push скрипту]' '--pull[Генериши pull скрипту]' '-pp[И push и pull]'
           ;;
         clone|add)
@@ -1227,7 +1259,16 @@ _%s "$@"
         COMPREPLY=( $(compgen -W "--private --public --desc --default-branch --clone -h --help" -- "$cur") )
       fi
       ;;
-    make|remake)
+    make)
+      if [[ $cword -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "repo --push --pull -pp -h --help" -- "$cur") )
+      elif [[ "${words[2]}" == "repo" ]]; then
+        COMPREPLY=( $(compgen -W "--private --public --desc --default-branch --clone -h --help" -- "$cur") )
+      else
+        COMPREPLY=( $(compgen -W "--push --pull -pp -h --help" -- "$cur") )
+      fi
+      ;;
+    remake)
       COMPREPLY=( $(compgen -W "--push --pull -pp -h --help" -- "$cur") )
       ;;
     clone|add)
@@ -1245,6 +1286,22 @@ complete -c %s -n "__fish_seen_subcommand_from completion" -a "zsh bash fish"
 complete -c %s -n "__fish_seen_subcommand_from generate" -a "config"
 complete -c %s -n "__fish_seen_subcommand_from create" -a "repo"
 complete -c %s -n "__fish_seen_subcommand_from repo" -a "create"
+complete -c %s -n "__fish_seen_subcommand_from make" -a "repo"
+complete -c %s -n "__fish_seen_subcommand_from create; and __fish_seen_subcommand_from repo" -l private
+complete -c %s -n "__fish_seen_subcommand_from create; and __fish_seen_subcommand_from repo" -l public
+complete -c %s -n "__fish_seen_subcommand_from create; and __fish_seen_subcommand_from repo" -l desc -r
+complete -c %s -n "__fish_seen_subcommand_from create; and __fish_seen_subcommand_from repo" -l default-branch -r
+complete -c %s -n "__fish_seen_subcommand_from create; and __fish_seen_subcommand_from repo" -l clone
+complete -c %s -n "__fish_seen_subcommand_from repo; and __fish_seen_subcommand_from create" -l private
+complete -c %s -n "__fish_seen_subcommand_from repo; and __fish_seen_subcommand_from create" -l public
+complete -c %s -n "__fish_seen_subcommand_from repo; and __fish_seen_subcommand_from create" -l desc -r
+complete -c %s -n "__fish_seen_subcommand_from repo; and __fish_seen_subcommand_from create" -l default-branch -r
+complete -c %s -n "__fish_seen_subcommand_from repo; and __fish_seen_subcommand_from create" -l clone
+complete -c %s -n "__fish_seen_subcommand_from make; and __fish_seen_subcommand_from repo" -l private
+complete -c %s -n "__fish_seen_subcommand_from make; and __fish_seen_subcommand_from repo" -l public
+complete -c %s -n "__fish_seen_subcommand_from make; and __fish_seen_subcommand_from repo" -l desc -r
+complete -c %s -n "__fish_seen_subcommand_from make; and __fish_seen_subcommand_from repo" -l default-branch -r
+complete -c %s -n "__fish_seen_subcommand_from make; and __fish_seen_subcommand_from repo" -l clone
 complete -c %s -n "__fish_seen_subcommand_from make remake" -l push
 complete -c %s -n "__fish_seen_subcommand_from make remake" -l pull
 complete -c %s -n "__fish_seen_subcommand_from make remake" -o pp
@@ -1253,7 +1310,7 @@ complete -c %s -n "__fish_seen_subcommand_from init" -l custom
 complete -c %s -n "__fish_seen_subcommand_from init" -l host -r
 complete -c %s -n "__fish_seen_subcommand_from init" -l port -r
 complete -c %s -n "__fish_seen_subcommand_from init" -l user -r
-`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName), nil
+`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName), nil
 	default:
 		return "", fmt.Errorf("неподржан shell: %s (подржано: zsh, bash, fish)", shell)
 	}
@@ -1861,6 +1918,7 @@ func printRootUsage(w io.Writer) {
   %s -gc
   %s completion zsh|bash|fish
   %s create repo owner/repo
+  %s make repo owner/repo
   %s repo create owner/repo
   %s doctor
   %s make --push --pull
@@ -1879,6 +1937,7 @@ func printRootUsage(w io.Writer) {
   %s -gc --force
   %s completion zsh > ~/.zsh/completions/_gitcrn
   %s create repo vltc/mojrepo --private --clone
+  %s make repo vltc/mojrepo --private --clone
   %s repo create crnbg/platform --public
   %s doctor
   %s make --push --pull
@@ -1890,7 +1949,7 @@ func printRootUsage(w io.Writer) {
   %s push
   %s pull
   %s add vltc/crnbg
-`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName)
+`, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName, appName)
 }
 
 func printInitUsage(w io.Writer) {
@@ -1961,7 +2020,8 @@ func printCompletionUsage(w io.Writer) {
 func printCreateUsage(w io.Writer) {
 	fmt.Fprintf(w, `Коришћење:
   %s create repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
-`, appName)
+  %s make repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
+`, appName, appName)
 }
 
 func printRepoUsage(w io.Writer) {
@@ -1973,16 +2033,18 @@ func printRepoUsage(w io.Writer) {
 func printCreateRepoUsage(w io.Writer) {
 	fmt.Fprintf(w, `Коришћење:
   %s create repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
+  %s make repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
   %s repo create owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
-`, appName, appName)
+`, appName, appName, appName)
 }
 
 func printMakeUsage(w io.Writer) {
 	fmt.Fprintf(w, `Коришћење:
+  %s make repo owner/repo [--private|--public] [--desc "..."] [--default-branch main] [--clone]
   %s make --push --pull
   %s make -pp
   %s remake --push --pull
   %s remake -pp
   %s -pp
-`, appName, appName, appName, appName, appName)
+`, appName, appName, appName, appName, appName, appName)
 }

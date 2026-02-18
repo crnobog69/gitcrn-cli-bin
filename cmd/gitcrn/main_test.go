@@ -200,6 +200,21 @@ func TestCompletionScript(t *testing.T) {
 		if !strings.Contains(out, "completion") {
 			t.Fatalf("completion output for %s should mention completion command", shell)
 		}
+		if shell == "fish" {
+			if !strings.Contains(out, "-l private") {
+				t.Fatalf("completion output for %s should include private option", shell)
+			}
+			if !strings.Contains(out, "-l clone") {
+				t.Fatalf("completion output for %s should include clone option", shell)
+			}
+		} else {
+			if !strings.Contains(out, "--private") {
+				t.Fatalf("completion output for %s should include --private", shell)
+			}
+			if !strings.Contains(out, "--clone") {
+				t.Fatalf("completion output for %s should include --clone", shell)
+			}
+		}
 	}
 
 	if _, err := completionScript("pwsh"); err == nil {

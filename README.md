@@ -7,6 +7,7 @@
 - Подешава SSH `Host gitcrn` у `~/.ssh/config`
 - Генерише конфиг: `gitcrn generate config` или `gitcrn -gc`
 - Креира репо преко Gitea API: `gitcrn create repo owner/repo`
+- Alias: `gitcrn make repo owner/repo`
 - Клонира репо: `gitcrn clone owner/repo`
 - Додаје remote `gitcrn`: `gitcrn add owner/repo`
 - Проверава окружење: `gitcrn doctor`
@@ -49,6 +50,7 @@ iwr https://raw.githubusercontent.com/crnobog69/gitcrn-cli-bin/refs/heads/master
 gitcrn doctor
 gitcrn -gc
 gitcrn create repo vltc/mojrepo --private --clone
+gitcrn make repo vltc/mojrepo --private --clone
 gitcrn init --default
 gitcrn clone vltc/kapri
 gitcrn add vltc/crnbg
@@ -106,6 +108,7 @@ gitcrn completion fish > ~/.config/fish/completions/gitcrn.fish
 ## `create repo`
 
 - Главна команда: `gitcrn create repo owner/repo`
+- Alias: `gitcrn make repo owner/repo`
 - Alias: `gitcrn repo create owner/repo`
 - Опције:
   - `--private` (default)
