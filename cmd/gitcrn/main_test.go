@@ -210,11 +210,17 @@ func TestCompletionScript(t *testing.T) {
 func TestShouldCheckUpdates(t *testing.T) {
 	t.Setenv("GITCRN_NO_UPDATE_CHECK", "")
 
+	if !shouldCheckUpdates("") {
+		t.Fatalf("empty command should trigger update checks")
+	}
+	if !shouldCheckUpdates("--version") {
+		t.Fatalf("--version should trigger update checks")
+	}
+	if !shouldCheckUpdates("help") {
+		t.Fatalf("help should trigger update checks")
+	}
 	if shouldCheckUpdates("completion") {
 		t.Fatalf("completion should not trigger update checks")
-	}
-	if shouldCheckUpdates("--version") {
-		t.Fatalf("--version should not trigger update checks")
 	}
 	if !shouldCheckUpdates("doctor") {
 		t.Fatalf("doctor should trigger update checks")

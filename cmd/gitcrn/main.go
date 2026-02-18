@@ -68,6 +68,9 @@ type giteaCreateRepoRequest struct {
 
 func main() {
 	if len(os.Args) < 2 {
+		if shouldCheckUpdates("") {
+			maybePrintUpdateNotice()
+		}
 		printRootUsage(os.Stderr)
 		os.Exit(1)
 	}
@@ -1327,7 +1330,7 @@ func shouldCheckUpdates(cmd string) bool {
 		return false
 	}
 	switch cmd {
-	case "-h", "--help", "help", "-v", "--version", "version", "completion":
+	case "completion":
 		return false
 	default:
 		return true
